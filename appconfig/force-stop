@@ -1,0 +1,6 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$PARENT_DIR/parameters.conf"
+
+$KUBECTL_PATH get namespace $1 -o json | jq '.spec.finalizers=[]' | $KUBECTL_PATH replace --raw "/api/v1/namespaces/$1/finalize" -f - > /dev/null 2>&1 &

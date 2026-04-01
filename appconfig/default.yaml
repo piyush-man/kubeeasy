@@ -1,0 +1,100 @@
+nameOverride:
+fullnameOverride:
+namespace:
+replicaCount: 1
+
+image:
+  repository: "localhost:32000/kubeeasydemo"
+  pullPolicy: "IfNotPresent"
+  tag:
+
+container:
+  port: 80
+
+dbUser:
+dbName:
+dbPassword:
+dbHost:
+dbPort:
+
+
+ingress:
+  enable: false
+  class: "internal-nginx"
+  domain:
+
+resources:
+  requests:
+    cpu:
+    memory:
+  limits:
+    cpu:
+    memory:
+
+service:
+  type: LoadBalancer
+  port: 80
+
+volumes: []
+
+volumeMounts: []
+
+livenessProbe:
+  tcpSocket:
+    port: 80
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+readinessProbe:
+  tcpSocket:
+    port: 80
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+autoscaling:
+  enabled: false
+  minReplicas:
+  maxReplicas:
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+serviceAccount:
+  create: false
+  automount: false
+  annotations: {}
+  name:
+
+
+imagePullSecrets: []
+
+podAnnotations: {}
+
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+variables: {}
+
+#persistence:
+#  enabled: true
+#  storageClass: "manual"
+#  accessMode: ReadWriteOnce
+#  size: 5Gi
+#  hostPath:
+#    enabled: true
+#    path: "/home/containers"
+
+#persistence:
+#  size: 10Gi

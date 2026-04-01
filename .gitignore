@@ -1,0 +1,6 @@
+-e .env
+.agent-connection.txt
+__pycache__
+*.pyc
+qdrant_storage
+.git

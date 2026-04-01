@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubemanager-api
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubemanager-api
+  template:
+    metadata:
+      labels:
+        app: kubemanager-api
+    spec:
+      serviceAccountName: kubemanager
+      containers:
+        - name: api
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "api/server.py"]
+          ports:
+            - containerPort: {{ .Values.api.port }}
+          env:
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubemanager-secrets
+                  key: GROQ_API_KEY
+            - name: AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kubemanager-secrets
+                  key: AGENT_TOKEN
+            - name: QDRANT_HOST
+              value: qdrant
+            - name: QDRANT_PORT
+              value: "6333"
+            - name: SCRIPT_DIR
+              value: /app/scripts
+            - name: INDEX_FILE
+              value: /data/index.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.api.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: kubemanager-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubemanager-api
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: kubemanager-api
+  type: {{ .Values.api.serviceType }}
+  ports:
+    - port: {{ .Values.api.port }}
+      targetPort: {{ .Values.api.port }}

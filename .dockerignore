@@ -1,0 +1,5 @@
+-e .env
+qdrant_storage
+__pycache__
+*.pyc
+.git
