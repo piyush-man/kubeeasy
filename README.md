@@ -424,12 +424,6 @@ Contributions are welcome! Please open an issue first to discuss what you'd like
 
 ---
 
-## License
-
-Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.
-
----
-
 <div align="center">
 
 **Made with ☸️ and ❤️ for the Kubernetes community**
