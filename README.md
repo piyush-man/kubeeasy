@@ -47,6 +47,11 @@ Think of it as having a Kubernetes expert on-call, embedded in your cluster, ava
 
 ---
 
+![Ask-AI](client/ask-ai.png)
+![Deploy](client/deploy.png)
+![Status](client/status.png)
+![Logs](client/logs.png)
+
 ## How It Works — The Big Picture
 
 ```
