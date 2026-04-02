@@ -1,181 +1,439 @@
-# KubeEasy
+<div align="center">
 
-**KubeEasy** is an AI-assisted control plane for a single Kubernetes cluster. You get a web UI to chat about workloads, inspect status, stream logs, and deploy or update applications—without juggling kubeconfig files in the browser. The backend runs **inside** the cluster and uses the pod’s **ServiceAccount** to call the Kubernetes API and tools such as `kubectl` and Helm.
+<br/>
 
-The default path is **pull published images and run the install script**. Building from source is optional and documented under [`deploy/`](deploy/).
-
----
-
-## Why this project exists
-
-- **Operator-friendly** — One Helm release gives you a small footprint: UI (nginx), API (Python/FastAPI), and Qdrant for RAG-backed context.
-- **No kubeconfig in the UI** — Users authenticate to the agent with a single **token**; RBAC is enforced by Kubernetes.
-- **Natural-language operations** — Ask questions in plain English; the system routes between **live** `kubectl` execution and **snapshot / RAG** answers when that is faster or sufficient.
-- **Composable** — The same backend exposes a WebSocket protocol so you can build other clients later; the bundled UI is a full single-page app.
-
----
-
-## Architecture
-
-```mermaid
-flowchart TB
-  subgraph browser [User]
-    UI[Web UI]
-  end
-  subgraph cluster [Kubernetes cluster]
-    FE[Frontend pod — nginx]
-    BE[Backend pod — FastAPI]
-    QD[Qdrant pod]
-    SA[ServiceAccount + ClusterRole]
-  end
-  UI -->|HTTP / WebSocket| FE
-  FE -->|"/api" "/ws" proxy| BE
-  BE --> QD
-  BE --> SA
-  SA --> API[Kubernetes API]
+```
+ ██╗  ██╗██╗   ██╗██████╗ ███████╗███████╗ █████╗ ███████╗██╗   ██╗
+ ██║ ██╔╝██║   ██║██╔══██╗██╔════╝██╔════╝██╔══██╗██╔════╝╚██╗ ██╔╝
+ █████╔╝ ██║   ██║██████╔╝█████╗  █████╗  ███████║███████╗ ╚████╔╝ 
+ ██╔═██╗ ██║   ██║██╔══██╗██╔══╝  ██╔══╝  ██╔══██║╚════██║  ╚██╔╝  
+ ██║  ██╗╚██████╔╝██████╔╝███████╗███████╗██║  ██║███████║   ██║   
+ ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝   
 ```
 
-- **Frontend** serves static assets and proxies `/ws` and `/api/` to the backend so you use **one URL** (no CORS gymnastics for the default install).
-- **Backend** runs the agent, indexer, and LLM tooling; it does not store your cluster credentials—those come from the projected service account.
-- **Qdrant** stores embedded snapshots of pod metadata for retrieval-augmented answers; a background indexer keeps vectors updated on a configurable interval.
+**Your Kubernetes cluster, explained in plain English.**
+
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Helm](https://img.shields.io/badge/Helm-3.x-0F1689?style=flat-square&logo=helm&logoColor=white)](https://helm.sh)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.25+-326CE5?style=flat-square&logo=kubernetes&logoColor=white)](https://kubernetes.io)
+[![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-DC143C?style=flat-square)](https://qdrant.tech)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+
+<br/>
+
+> **KubeEasy** is an AI-powered Kubernetes management assistant that lives *inside* your cluster.  
+> Ask questions in plain English. Get real answers. No YAML headaches, no terminal juggling.
+
+<br/>
+
+</div>
+
+---
+
+## What is KubeEasy?
+
+Managing a Kubernetes cluster usually means memorizing dozens of `kubectl` commands, understanding YAML configurations, and constantly switching between terminals. For developers and ops teams alike, this friction slows things down.
+
+**KubeEasy removes that friction.**
+
+It deploys a small AI assistant directly inside your cluster that:
+- **Understands natural language** — ask *"Why is my pod crashing?"* and get a real answer
+- **Executes live commands** — it can actually run `kubectl` and Helm commands on your behalf
+- **Learns your cluster** — a background indexer continuously maps your workloads for instant recall
+- **Requires no client-side tools** — everything runs through a simple web browser UI
+
+Think of it as having a Kubernetes expert on-call, embedded in your cluster, available 24/7.
+
+---
+
+## How It Works — The Big Picture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         YOUR BROWSER                            │
+│                    [ KubeEasy Web UI ]                          │
+│           "Why is my frontend pod restarting?"                  │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │  WebSocket (real-time)
+┌─────────────────────────▼───────────────────────────────────────┐
+│                     KUBERNETES CLUSTER                          │
+│                                                                 │
+│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐  │
+│  │   Frontend   │───▶│   AI Backend     │───▶│   Qdrant     │  │
+│  │  (nginx)     │    │  (FastAPI)       │    │  (Vector DB) │  │
+│  │              │    │                  │    │              │  │
+│  │ Serves the   │    │ • Routes your    │    │ • Stores     │  │
+│  │ web UI and   │    │   question to    │    │   embeddings │  │
+│  │ proxies all  │    │   live kubectl   │    │   of all     │  │
+│  │ traffic      │    │   OR RAG lookup  │    │   your pods  │  │
+│  └──────────────┘    │ • Runs Helm cmds │    └──────────────┘  │
+│                      │ • Streams logs   │                       │
+│                      │ • Manages apps   │                       │
+│                      └────────┬─────────┘                       │
+│                               │  Uses ServiceAccount            │
+│                      ┌────────▼─────────┐                       │
+│                      │ Kubernetes API   │                       │
+│                      │ (native access)  │                       │
+│                      └──────────────────┘                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### The Intelligence Layer
+
+When you ask KubeEasy a question, it doesn't blindly call an LLM. It has a smart routing engine:
+
+| Question Type | What Happens |
+|---|---|
+| *"Show me live logs for pod X"* | Runs `kubectl logs` in real-time and streams output |
+| *"Why did my pod crash at 3am?"* | Queries live events + Kubernetes API for crash reasons |
+| *"How many pods are in the payments namespace?"* | Hits the RAG index (fast, no live call needed) |
+| *"Deploy my app with Helm"* | Executes your configured Helm script directly |
+
+This hybrid approach means answers are **fast when possible, live when necessary**.
+
+---
+
+## Features
+
+- **🤖 AI Chat Interface** — Ask anything about your cluster in plain English
+- **📊 Cluster Dashboard** — Live status of nodes, namespaces, and workloads
+- **📜 Log Streaming** — Stream pod logs directly in the browser
+- **🚀 App Deployment** — Deploy and update Helm applications via UI
+- **🔐 Token-based Auth** — Secure WebSocket authentication; no kubeconfig exposed to the browser
+- **🧠 RAG-powered Context** — Vector search over cluster snapshots for instant answers
+- **🔄 Background Indexing** — Cluster state is continuously embedded and kept fresh
+- **⚡ Zero-dependency Install** — One script, uses pre-built images from Docker Hub
 
 ---
 
 ## Prerequisites
 
-- A Kubernetes cluster and a working kubeconfig (`kubectl` can talk to the cluster).
-- **Helm 3** and **OpenSSL** on the machine where you run the installer.
-- A **[Groq](https://groq.com/) API key** for the LLM (you may set it in `.env` before install **or** paste it in the UI wizard on first run if you install without it).
+Before you begin, make sure you have:
 
-You do **not** need Docker on your laptop for the recommended install—you only pull images that are already published.
+| Requirement | Why It's Needed |
+|---|---|
+| A running Kubernetes cluster | Where KubeEasy will be deployed |
+| `kubectl` configured and working | The install script uses it to talk to your cluster |
+| **Helm 3** installed | Used to deploy KubeEasy into your cluster |
+| **OpenSSL** installed | Generates a secure agent token during install |
+| A **[Groq API key](https://console.groq.com/)** | Powers the AI (free tier available) |
+
+> **No Docker needed on your machine** — the install script pulls pre-built images directly from Docker Hub.
 
 ---
 
-## Recommended install (published images + install script)
+## Quick Start — 3 Steps to Running KubeEasy
 
-### 1. Clone the repository
+### Step 1 — Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/kubeeasy.git
+git clone https://github.com/piyush-man/kubeeasy.git
 cd kubeeasy
 ```
 
-Use the upstream repository URL once it is published, or point at your fork.
-
-### 2. Configure environment (repo root)
+### Step 2 — Configure your environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set at least:
+Now open `.env` in any text editor and fill in your Groq API key:
 
-- **`GROQ_API_KEY`** — your Groq key (recommended before install so the AI stack is ready immediately).  
-  If you omit it, the install still succeeds; the UI will offer a one-time setup step that patches the cluster Secret and restarts the backend.
+```env
+# Required: Get your free key at https://console.groq.com/
+GROQ_API_KEY=gsk_your_key_here
 
-**Image variables** — The defaults in `.env.example` point at published images (`docker.io/piyushman/kubeeasy-api` and `docker.io/piyushman/kubeeasy-ui`). You can leave them as-is for a standard install or override them if you publish your own registry.
+# Everything else has sensible defaults — you don't need to change anything else
+# The pre-built Docker Hub images are already configured in .env.example
+```
 
-### 3. Run the installer
+> **Tip:** The `.env.example` already points to pre-built images (`piyushman/kubemanager`) on Docker Hub.  
+> You do **not** need to build anything from source. Just set your API key and go.
+
+### Step 3 — Run the install script
 
 ```bash
 chmod +x deploy/install.sh
 ./deploy/install.sh
 ```
 
-The script:
+That's it. The script will:
 
-- Resolves kubeconfig (supports common paths, MicroK8s, K3s, kubeadm, RKE2, or `KUBECONFIG`).
-- Detects a storage class when possible (you can set `STORAGE_CLASS` in `.env`).
-- Picks **NodePort** vs **LoadBalancer** for the frontend service based on cluster type unless `SERVICE_TYPE` is set in `.env`.
-- Runs **`helm upgrade --install`** against [`deploy/helm/kubeeasy`](deploy/helm/kubeeasy).
-- Prints a **UI URL hint** (NodePort/LB) and the **agent token**, and writes **`./.agent-connection.txt`** in the repo root for reference.
+1. ✅ Auto-detect your kubeconfig (supports standard, MicroK8s, K3s, kubeadm, RKE2)
+2. ✅ Detect your cluster's storage class for persistent volumes
+3. ✅ Determine the best service type (NodePort or LoadBalancer) for your environment
+4. ✅ Deploy everything with `helm upgrade --install`
+5. ✅ Print your **UI URL** and **agent token** to the console
+6. ✅ Save connection details to `.agent-connection.txt` in the repo root
 
-### 4. Open the UI and connect
+**Sample install output:**
+```
+✔ Kubeconfig detected: /home/user/.kube/config
+✔ Storage class detected: standard
+✔ Deploying KubeEasy via Helm...
+✔ Deployment complete!
 
-1. Use the URL from the script output, or run:
-
-   ```bash
-   helm get notes kubeeasy -n kubeeasy
-   ```
-
-   (Use your release name and namespace if you changed `HELM_RELEASE` / `HELM_NAMESPACE` in `.env`.)
-
-2. When the login screen appears, paste the **WebSocket URL** if you are not served via the default same-origin `/ws` path (opening the UI through the frontend service usually auto-fills this).
-
-3. Paste the **agent token** (from the installer output or `kubectl get secret … AGENT_TOKEN` as documented in the Helm notes).
-
-4. If you skipped `GROQ_API_KEY` in `.env`, complete the **Groq API key** step first; wait for the backend rollout to finish, then connect.
-
----
-
-## What the backend does
-
-The backend is a **FastAPI** application (`api/server.py`) built for in-cluster operation.
-
-| Area | Behavior |
-|------|----------|
-| **Authentication** | After connecting on `/ws`, the first message must be the shared **agent token** (from the Helm Secret). The server compares it using a constant-time check. |
-| **AI questions** | Messages with `action: "ask"` go through **`rag.query_engine.ask`**. The engine chooses **live** `kubectl` / shell flows when the question implies real-time data (logs, crashes, events, “why now”), and **RAG + LLM** over Qdrant snapshots otherwise when safe. |
-| **Deployments** | The UI can trigger your shell helpers under `scripts/` (e.g. deploy, scale, remove) using parameters from the form—mirroring how operators already script Helm installs for apps. |
-| **Indexing** | A **background thread** runs the RAG pipeline (`rag/rag_pipeline.py`): collect pod data in-cluster, embed text, upsert into Qdrant, prune old points—so retrieval stays close to cluster reality without blocking the API event loop. |
-| **Cluster introspection** | Actions return live node, namespace, and workload information; raw **`kubectl`** passthrough is available for advanced users (with a guard against deleting the install namespace). |
-| **First-run setup** | `GET /api/setup/status` and `POST /api/setup` allow supplying **Groq** when the Secret was installed with an empty key; the handler patches the Secret and triggers a **rollout restart** of the backend Deployment. |
-
-**RBAC:** The chart binds a **ClusterRole** with broad read/write permissions within typical app namespaces so the agent can manage workloads you ask it to. Treat the **agent token** like a password and scope installs to clusters you trust.
-
----
-
-## Configuration reference (`.env`)
-
-| Variable | Purpose |
-|----------|---------|
-| `GROQ_API_KEY` | Groq API key (optional at install if you use the UI wizard). |
-| `BACKEND_IMAGE_REPO` / `FRONTEND_IMAGE_REPO` | Container repositories; default to published `docker.io/piyushman/kubeeasy-{api,ui}`. |
-| `IMAGE_TAG` | Tag for both images unless `BACKEND_IMAGE_TAG` / `FRONTEND_IMAGE_TAG` are set. |
-| `HELM_NAMESPACE` / `HELM_RELEASE` | Namespace and Helm release name (defaults: `kubeeasy`). |
-| `STORAGE_CLASS` | PVC storage class for Qdrant and backend data (auto-detected if unset). |
-| `SERVICE_TYPE` | `NodePort` or `LoadBalancer` for the frontend Service. |
-| `AGENT_TOKEN` | Optional; installer generates one if not set. |
-| `KUBECONFIG` | Optional explicit kubeconfig path. |
-
-See [`.env.example`](.env.example) for a copy-paste template.
-
----
-
-## Repository layout
-
-| Path | Description |
-|------|-------------|
-| `api/` | FastAPI server, WebSocket API, setup endpoints. |
-| `client/` | Static web UI (served by the frontend image). |
-| `rag/`, `embeddings/`, `collector/`, `vector_db/` | RAG pipeline, embeddings, Qdrant client. |
-| `scripts/` | Shell automation invoked by the backend for deploy/update lifecycle. |
-| `appconfig/` | Helm subchart for applications deployed *through* the UI. |
-| [`deploy/`](deploy/) | **Dockerfile**, **`install.sh`**, **Helm chart** (`deploy/helm/kubeeasy`). |
-| [`deploy/README.md`](deploy/README.md) | Manual Helm commands, building images from source, deeper operational notes. |
-
----
-
-## Building your own images (optional)
-
-If you change application code and need custom images, build from the repository root with:
-
-```bash
-docker build -f deploy/Dockerfile --target backend -t your-registry/kubeeasy-api:latest .
-docker build -f deploy/Dockerfile --target frontend -t your-registry/kubeeasy-ui:latest .
+──────────────────────────────────
+  KubeEasy is ready!
+  UI URL:      http://192.168.1.10:32080
+  Agent Token: eyJhbGci...
+──────────────────────────────────
+Connection details saved to .agent-connection.txt
 ```
 
-Then set `BACKEND_IMAGE_REPO`, `FRONTEND_IMAGE_REPO`, and `IMAGE_TAG` in `.env` before running `./deploy/install.sh`, or pass `--set` overrides to Helm as described in [`deploy/README.md`](deploy/README.md).
+---
+
+## Accessing KubeEasy
+
+1. **Open the URL** printed by the install script in your browser
+2. **Paste the agent token** when prompted on the login screen
+3. **Start asking questions!**
+
+If you skipped the `GROQ_API_KEY` in `.env`, you'll see a one-time setup wizard in the UI — paste your key there, and KubeEasy will patch itself and restart automatically.
+
+---
+
+## Example Conversations
+
+Once connected, you can ask things like:
+
+```
+You: Why is my nginx pod in CrashLoopBackOff?
+
+KubeEasy: The pod nginx-7d9f8b-xk2p is crashing because it cannot bind to port 80.
+          The previous process left a lock file at /var/run/nginx.pid. Last exit code: 1.
+          Recommendation: Delete the pod to let it restart cleanly — the lock file 
+          will be cleared on next start.
+```
+
+```
+You: Show me all pods that are not running
+
+KubeEasy: Found 3 pods not in Running state:
+          • payments-worker-abc123 [Pending] — no nodes match resource requests (need 4Gi RAM)
+          • cache-redis-xyz789 [CrashLoopBackOff] — OOMKilled 6 times in last hour
+          • batch-job-old [Completed] — finished successfully 2h ago
+```
+
+```
+You: Deploy my app "store-api" using Helm with image tag v2.1.0
+
+KubeEasy: Running Helm upgrade for store-api with tag v2.1.0...
+          ✔ Deployed successfully. 2/2 pods ready.
+```
+
+---
+
+## Configuration Reference
+
+All configuration lives in your `.env` file. Here's what each variable controls:
+
+| Variable | Default | Description |
+|---|---|---|
+| `GROQ_API_KEY` | *(empty)* | Your Groq API key for AI features |
+| `BACKEND_IMAGE_REPO` | `docker.io/piyushman/kubeeasy-api` | Backend container image |
+| `FRONTEND_IMAGE_REPO` | `docker.io/piyushman/kubeeasy-ui` | Frontend container image |
+| `IMAGE_TAG` | `latest` | Image tag for both containers |
+| `HELM_NAMESPACE` | `kubeeasy` | Kubernetes namespace to deploy into |
+| `HELM_RELEASE` | `kubeeasy` | Helm release name |
+| `STORAGE_CLASS` | *(auto-detected)* | PVC storage class for Qdrant data |
+| `SERVICE_TYPE` | *(auto-detected)* | `NodePort` or `LoadBalancer` |
+| `AGENT_TOKEN` | *(auto-generated)* | Shared secret for UI authentication |
+| `KUBECONFIG` | *(auto-detected)* | Explicit path to kubeconfig file |
+
+---
+
+## Repository Structure
+
+```
+kubeeasy/
+├── api/              # FastAPI backend — WebSocket API, AI routing, setup endpoints
+├── client/           # Web UI — single-page app served by nginx
+├── rag/              # RAG query engine — decides live vs. vector-search routing
+├── embeddings/       # Text embedding logic for cluster state
+├── collector/        # Collects pod/node/namespace data from Kubernetes API
+├── vector_db/        # Qdrant client wrapper and schema
+├── processor/        # Processes raw cluster data into embeddable text
+├── scripts/          # Shell scripts for Helm deploy/update lifecycle
+├── appconfig/        # Helm subchart for apps deployed through the UI
+├── deploy/
+│   ├── helm/         # Main Helm chart for KubeEasy itself
+│   ├── install.sh    # ← The install script you run
+│   ├── Dockerfile    # Multi-stage build (if building from source)
+│   └── README.md     # Advanced Helm and build-from-source docs
+├── .env.example      # Template with pre-built image references
+└── requirements.txt  # Python dependencies
+```
+
+---
+
+## What's Happening Under the Hood
+
+### The RAG Pipeline (How KubeEasy "knows" your cluster)
+
+Every few minutes, a background thread runs this cycle:
+
+```
+Collect → Process → Embed → Store → Prune
+
+1. COLLECT  — Calls Kubernetes API: lists all pods, nodes, namespaces, events
+2. PROCESS  — Converts raw API objects into human-readable text descriptions
+3. EMBED    — Sends text through an embedding model to create vector representations
+4. STORE    — Upserts vectors + metadata into Qdrant (the vector database)
+5. PRUNE    — Removes vectors for resources that no longer exist
+```
+
+When you ask a question, the RAG engine:
+1. Embeds your question into a vector
+2. Finds the most semantically similar cluster state entries in Qdrant
+3. Feeds those entries as context to the LLM (Groq)
+4. Returns a grounded, cluster-specific answer — not a generic response
+
+### Authentication Flow
+
+```
+Browser                    Backend
+   │                          │
+   │── WebSocket connect ────▶│
+   │                          │
+   │── First message:         │
+   │   { token: "..." } ────▶│  ← constant-time comparison
+   │                          │     (prevents timing attacks)
+   │◀── { status: "ok" } ────│
+   │                          │
+   │── { action: "ask",       │
+   │    query: "..." } ─────▶│
+   │                          │
+   │◀── streamed response ────│
+```
+
+The token is generated by the install script (or you can set your own in `.env`). It never leaves your cluster infrastructure.
 
 ---
 
 ## Troubleshooting
 
-- **`ImagePullBackOff`** — Confirm nodes can reach Docker Hub (or set your registry mirrors / pull secrets).
-- **`Pending` PVCs** — Set `STORAGE_CLASS` in `.env` to a class that exists in your cluster (`kubectl get storageclass`).
-- **No external IP on LoadBalancer** — Use `SERVICE_TYPE=NodePort` in `.env` or `kubectl port-forward svc/<release>-kubeeasy-frontend 8080:80 -n <namespace>` (adjust Service name with `kubectl get svc`).
-- **WebSocket fails** — Ensure you hit the **frontend** Service (proxy path `/ws`), not the backend ClusterIP directly, unless you intentionally connect with the backend port and URL.
+**Pods stuck in `ImagePullBackOff`**
+```bash
+# Verify nodes can reach Docker Hub
+kubectl describe pod <pod-name> -n kubeeasy | grep -A5 Events
+# If on an air-gapped cluster, set a registry mirror in .env before reinstalling
+```
+
+**PVCs stuck in `Pending`**
+```bash
+# Check available storage classes
+kubectl get storageclass
+# Set the correct one in .env
+STORAGE_CLASS=your-storage-class-name
+# Then re-run ./deploy/install.sh
+```
+
+**No external IP on LoadBalancer service**
+```bash
+# Option 1: Use NodePort instead
+# Add to .env: SERVICE_TYPE=NodePort
+
+# Option 2: Port-forward directly (quick test)
+kubectl port-forward svc/kubeeasy-frontend 8080:80 -n kubeeasy
+# Then open http://localhost:8080
+```
+
+**WebSocket connection fails in the UI**
+- Make sure you're accessing the **frontend** URL (the one printed by the install script)
+- The frontend proxies `/ws` to the backend — do not try to connect directly to the backend port
+- Check that both frontend and backend pods are in `Running` state:
+  ```bash
+  kubectl get pods -n kubeeasy
+  ```
+
+**Groq API errors**
+- Verify your key at [console.groq.com](https://console.groq.com)
+- You can update the key without reinstalling: use the setup wizard in the UI, or:
+  ```bash
+  kubectl create secret generic kubeeasy-secrets \
+    --from-literal=GROQ_API_KEY=your_new_key \
+    -n kubeeasy --dry-run=client -o yaml | kubectl apply -f -
+  kubectl rollout restart deployment/kubeeasy-api -n kubeeasy
+  ```
 
 ---
 
-**KubeEasy** — ship a cluster-aware assistant with a single Helm release and a short install script, using ready-made images by default.
+## Building From Source (Optional)
+
+Only needed if you modify the application code.
+
+```bash
+# Build the backend image
+docker build -f deploy/Dockerfile --target backend \
+  -t your-registry/kubeeasy-api:latest .
+
+# Build the frontend image
+docker build -f deploy/Dockerfile --target frontend \
+  -t your-registry/kubeeasy-ui:latest .
+
+# Push to your registry
+docker push your-registry/kubeeasy-api:latest
+docker push your-registry/kubeeasy-ui:latest
+```
+
+Then update `.env`:
+```env
+BACKEND_IMAGE_REPO=your-registry/kubeeasy-api
+FRONTEND_IMAGE_REPO=your-registry/kubeeasy-ui
+IMAGE_TAG=latest
+```
+
+And re-run `./deploy/install.sh`. See [`deploy/README.md`](deploy/README.md) for advanced Helm options.
+
+---
+
+## Security Considerations
+
+- **Treat the agent token like a password.** Anyone with this token can execute operations on your cluster through KubeEasy.
+- The backend uses a **ClusterRole** with broad read/write permissions — this is intentional for a management tool. Deploy only on clusters you own/trust.
+- Your Groq API key is stored as a Kubernetes `Secret`, not in environment variables on the container directly.
+- No credentials are ever sent to the browser or stored client-side.
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| Backend API | Python 3.11, FastAPI, WebSockets |
+| AI / LLM | Groq (LLaMA 3 family) |
+| RAG Pipeline | Custom, with Qdrant vector search |
+| Vector Database | Qdrant |
+| Frontend | HTML/CSS/JS (served via nginx) |
+| Packaging | Helm 3, Docker (multi-stage) |
+| In-cluster Auth | Kubernetes ServiceAccount + RBAC |
+
+---
+
+## Contributing
+
+Contributions are welcome! Please open an issue first to discuss what you'd like to change.
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit your changes (`git commit -m 'Add your feature'`)
+4. Push to the branch (`git push origin feature/your-feature`)
+5. Open a Pull Request
+
+---
+
+## License
+
+Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.
+
+---
+
+<div align="center">
+
+**Made with ☸️ and ❤️ for the Kubernetes community**
+
+*If KubeEasy helped you, consider giving it a ⭐ on GitHub!*
+
+</div>
