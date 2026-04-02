@@ -101,14 +101,14 @@ This hybrid approach means answers are **fast when possible, live when necessary
 
 ## Features
 
-- ** AI Chat Interface ** — Ask anything about your cluster in plain English
-- ** Cluster Dashboard ** — Live status of nodes, namespaces, and workloads
-- ** Log Streaming ** — Stream pod logs directly in the browser
-- ** App Deployment ** — Deploy and update Helm applications via UI
-- ** Token-based Auth ** — Secure WebSocket authentication; no kubeconfig exposed to the browser
-- ** RAG-powered Context ** — Vector search over cluster snapshots for instant answers
-- ** Background Indexing ** — Cluster state is continuously embedded and kept fresh
-- ** Zero-dependency Install ** — One script, uses pre-built images from Docker Hub
+- **🤖 AI Chat Interface** — Ask anything about your cluster in plain English
+- **📊 Cluster Dashboard** — Live status of nodes, namespaces, and workloads
+- **📜 Log Streaming** — Stream pod logs directly in the browser
+- **🚀 App Deployment** — Deploy and update Helm applications via UI
+- **🔐 Token-based Auth** — Secure WebSocket authentication; no kubeconfig exposed to the browser
+- **🧠 RAG-powered Context** — Vector search over cluster snapshots for instant answers
+- **🔄 Background Indexing** — Cluster state is continuously embedded and kept fresh
+- **⚡ Zero-dependency Install** — One script, uses pre-built images from Docker Hub
 
 ---
 
@@ -165,12 +165,12 @@ chmod +x deploy/install.sh
 
 That's it. The script will:
 
-1.  Auto-detect your kubeconfig (supports standard, MicroK8s, K3s, kubeadm, RKE2)
-2.  Detect your cluster's storage class for persistent volumes
-3.  Determine the best service type (NodePort or LoadBalancer) for your environment
-4.  Deploy everything with `helm upgrade --install`
-5.  Print your **UI URL** and **agent token** to the console
-6.  Save connection details to `.agent-connection.txt` in the repo root
+1. ✅ Auto-detect your kubeconfig (supports standard, MicroK8s, K3s, kubeadm, RKE2)
+2. ✅ Detect your cluster's storage class for persistent volumes
+3. ✅ Determine the best service type (NodePort or LoadBalancer) for your environment
+4. ✅ Deploy everything with `helm upgrade --install`
+5. ✅ Print your **UI URL** and **agent token** to the console
+6. ✅ Save connection details to `.agent-connection.txt` in the repo root
 
 **Sample install output:**
 ```

@@ -62,7 +62,9 @@ Rules for commands:
 - For resource usage: kubectl top pods -A and kubectl top nodes (if metrics-server available)
 - For events: kubectl get events -n <ns> --sort-by='.lastTimestamp'
 - Max 5 commands. Pick the most informative ones.
-- Never run destructive commands (delete, apply, patch, etc.)
+- For pod restarts use: kubectl delete pod <name> -n <ns>  (safe — the Deployment controller recreates it automatically)
+- You may also use: kubectl rollout restart deployment <name> -n <ns>
+- Never run: apply, patch, replace, edit, annotate, label, taint, cordon, drain, uncordon
 - If you need a specific pod/namespace and don't know it, run kubectl get pods -A first."""
 
 _SYSTEM_SYNTHESIZER = """You are KubeBot — an expert Kubernetes SRE. You have just run live kubectl commands on a Kubernetes cluster and received the real output.
@@ -84,12 +86,16 @@ def _run_safe(cmd: str, timeout: int = 20) -> str:
     parts = cmd.strip().split()
     if not parts or parts[0] != "kubectl":
         return f"[skipped non-kubectl command: {cmd}]"
-    # Block destructive operations
-    danger = {"delete","apply","patch","replace","edit","scale","rollout","create",
-               "annotate","label","taint","cordon","drain","uncordon"}
-    for part in parts[1:]:
-        if part.lower() in danger:
-            return f"[blocked: '{part}' is a write operation]"
+    # Allow safe restart operations explicitly
+    if len(parts) >= 3 and parts[1] == "rollout" and parts[2] == "restart":
+        pass  # allow rollout restart
+    else:
+        # Block destructive operations
+        danger = {"apply","patch","replace","edit","scale","create",
+                   "annotate","label","taint","cordon","drain","uncordon"}
+        for part in parts[1:]:
+            if part.lower() in danger:
+                return f"[blocked: '{part}' is a write operation]"
     try:
         r = subprocess.run(parts, capture_output=True, text=True, timeout=timeout)
         out = r.stdout.strip()
