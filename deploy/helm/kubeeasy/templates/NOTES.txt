@@ -1,0 +1,25 @@
+KubeEasy has been installed.
+
+1. Get your agent token:
+   kubectl get secret {{ include "kubeeasy.fullname" . }}-secrets -n {{ .Release.Namespace }} -o jsonpath='{.data.AGENT_TOKEN}' | base64 -d
+   echo
+
+2. Open the UI:
+{{- if eq .Values.frontend.serviceType "LoadBalancer" }}
+   kubectl get svc {{ include "kubeeasy.fullname" . }}-frontend -n {{ .Release.Namespace }} -w
+   Then browse http://EXTERNAL_IP:{{ .Values.frontend.port }}
+{{- else if eq .Values.frontend.serviceType "NodePort" }}
+   export NODE_PORT=$(kubectl get svc {{ include "kubeeasy.fullname" . }}-frontend -n {{ .Release.Namespace }} -o jsonpath='{.spec.ports[0].nodePort}')
+   export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
+   [ -z "$NODE_IP" ] && NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+   echo "http://${NODE_IP}:${NODE_PORT}"
+{{- else }}
+   kubectl port-forward svc/{{ include "kubeeasy.fullname" . }}-frontend {{ .Values.frontend.port }}:{{ .Values.frontend.port }} -n {{ .Release.Namespace }}
+   Open http://127.0.0.1:{{ .Values.frontend.port }}
+{{- end }}
+
+3. If you installed without groqApiKey, the UI will prompt for your Groq API key (or POST /api/setup).
+
+4. Build images (run from repository root):
+   docker build -f deploy/Dockerfile -t your-registry/kubeeasy-api:latest --target backend .
+   docker build -f deploy/Dockerfile -t your-registry/kubeeasy-ui:latest --target frontend .

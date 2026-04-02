@@ -1,5 +1,6 @@
 import sys
 import time
+import os
 from collector.collector import load_k8s, get_pod_data
 from processor.preprocess import clean_text
 from embeddings.embedder import get_embeddings
@@ -36,25 +37,30 @@ def run_pipeline():
         traceback.print_exc()
 
 
-if __name__ == "__main__":
+def pipeline_daemon(interval_seconds: float | None = None, purge_on_start: bool = False) -> None:
+    """Long-running RAG indexer (in-cluster). Safe to run in a background thread on the API pod."""
+    interval_seconds = interval_seconds or float(os.getenv("PIPELINE_INTERVAL_SECONDS", "15"))
     load_k8s()
 
-    if "--purge" in sys.argv or "--purge-on-start" in sys.argv:
+    if purge_on_start:
         print("Purging old collection and recreating...")
         purge_and_recreate()
     else:
         ensure_collection()
-
-    INTERVAL = 15   # seconds between pipeline starts
 
     while True:
         print("=== Running pipeline ===")
         t_start = time.time()
         run_pipeline()
         elapsed = time.time() - t_start
-        wait = max(0, INTERVAL - elapsed)
+        wait = max(0.0, interval_seconds - elapsed)
         if wait > 0:
             print(f"Next run in {wait:.1f}s...\n")
             time.sleep(wait)
         else:
             print(f"Pipeline took {elapsed:.1f}s, running immediately\n")
+
+
+if __name__ == "__main__":
+    purge = "--purge" in sys.argv or "--purge-on-start" in sys.argv
+    pipeline_daemon(purge_on_start=purge)

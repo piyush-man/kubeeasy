@@ -734,11 +734,21 @@ select{
       </svg>
       <h2 class="brand-mark">Kube<span>Easy</span></h2>
     </div>
-    <p class="conn-subtitle">Run <code>./install.sh</code> on your cluster — it prints the URL and token.</p>
+    <p class="conn-subtitle">Install with <code>helm install kubeeasy ./deploy/helm/kubeeasy -n kubeeasy --create-namespace</code> — then open this page from the UI service URL. Paste your agent token from <code>kubectl get secret … AGENT_TOKEN</code> (see <code>helm get notes</code>). If you skipped <code>groqApiKey</code> in Helm, enter it below first.</p>
+    <div id="setup-groq-wrap" style="display:none">
+      <div class="field">
+        <label>Groq API key</label>
+        <input type="password" id="groq-key" placeholder="gsk_…" autocomplete="off">
+        <span class="field-hint">Stored in a Kubernetes Secret. Backend restarts once to apply.</span>
+      </div>
+      <button type="button" class="btn green" id="groq-save-btn" onclick="saveGroqKey()" style="width:100%;justify-content:center;margin-bottom:16px;padding:12px">Save API key</button>
+      <div class="errbox" id="groq-err"></div>
+      <p class="field-hint" id="groq-hint" style="display:none;margin-bottom:16px">Wait ~30s for the backend to restart, then connect below.</p>
+    </div>
     <div class="field">
-      <label>Agent WebSocket URL</label>
-      <input type="url" id="ws-url" placeholder="ws://192.168.1.10:32080/ws">
-      <span class="field-hint">Supports any Kubernetes: local, cloud, or on-prem</span>
+      <label>WebSocket URL</label>
+      <input type="url" id="ws-url" placeholder="ws://your-node:3xxxx/ws">
+      <span class="field-hint">When served from the cluster UI, this defaults to this site’s <code>/ws</code>. Use a full URL only if you opened this file locally or use port-forward.</span>
     </div>
     <div class="field">
       <label>Agent Token</label>
@@ -960,7 +970,14 @@ const ls=k=>{try{return localStorage.getItem(k)}catch{return null}};
 const lss=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
 const lsd=k=>{try{localStorage.removeItem(k)}catch{}};
 
-let ws=null,authed=false,mountCount=0,mounts=[],allApps={},rawLogs='';
+function isFileOrigin(){return location.protocol==='file:';}
+function defaultWsUrl(){
+  if(isFileOrigin()) return '';
+  const p=location.protocol==='https:'?'wss:':'ws:';
+  return p+'//'+location.host+'/ws';
+}
+
+let ws=null,authed=false,mountCount=0,mounts=[],allApps={},rawLogs='',_setupNeedsGroq=false;
 
 function toast(msg,type='info',dur=3500){
   const t=document.createElement('div');
@@ -971,11 +988,45 @@ function toast(msg,type='info',dur=3500){
   setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),300);},dur);
 }
 
-window.addEventListener('load',()=>{
-  const url=ls('km_url'),tok=ls('km_tok');
-  if(url) G('ws-url').value=url;
-  if(url&&tok) connectWith(url,tok);
+async function saveGroqKey(){
+  const k=G('groq-key').value.trim(),err=G('groq-err'),hint=G('groq-hint');
+  err.style.display='none';hint.style.display='none';
+  if(!k){err.textContent='Enter your Groq API key';err.style.display='block';return;}
+  G('groq-save-btn').disabled=true;
+  try{
+    const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({groqApiKey:k})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){err.textContent=j.error||'Save failed';err.style.display='block';return;}
+    hint.style.display='block';
+    toast(j.message||'Saved. Backend is restarting.','ok',8000);
+    (async()=>{
+      for(let i=0;i<36;i++){
+        await new Promise(r=>setTimeout(r,5000));
+        try{
+          const s=await fetch('/api/setup/status').then(r=>r.json());
+          if(s&&!s.needsGroq){ _setupNeedsGroq=false; toast('Backend is ready — connect when you have your token.','ok'); return; }
+        }catch{}
+      }
+    })();
+  }catch(e){err.textContent=String(e);err.style.display='block';}
+  finally{G('groq-save-btn').disabled=false;}
+}
+
+window.addEventListener('load',async()=>{
+  const du=defaultWsUrl();
+  if(du&&!ls('km_url')) G('ws-url').value=du;
+  if(ls('km_url')) G('ws-url').value=ls('km_url');
+  if(!isFileOrigin()){
+    try{
+      const r=await fetch('/api/setup/status');
+      const st=await r.json();
+      _setupNeedsGroq=!!(st&&st.needsGroq);
+      G('setup-groq-wrap').style.display=_setupNeedsGroq?'block':'none';
+    }catch{ G('setup-groq-wrap').style.display='none'; _setupNeedsGroq=false; }
+  } else G('setup-groq-wrap').style.display='none';
   addMount();
+  const url=G('ws-url').value.trim(),tok=ls('km_tok');
+  if(url&&tok&& !_setupNeedsGroq) connectWith(url,tok);
 });
 
 function setDot(cls,txt){G('dot').className='dot '+(cls||'');G('conn-txt').textContent=txt;}

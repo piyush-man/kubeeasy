@@ -1,13 +1,16 @@
 """
-KubeManager Agent API — single cluster, single token, no kubeconfig.
+KubeEasy API — single cluster, single token, no kubeconfig.
 The pod's ServiceAccount provides all Kubernetes access automatically.
 
-WS /ws    — all operations (auth → action → response)
+WS /ws       — all operations (auth → action → response)
 GET /healthz — liveness probe
+GET/POST /api/setup — optional first-run Groq API key (when key not set via Helm)
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-import os, secrets, json, subprocess, asyncio, traceback
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import os, secrets, json, subprocess, asyncio, traceback, threading, time, base64
 
 try:
     from dotenv import load_dotenv
@@ -17,14 +20,80 @@ except ImportError:
 
 from rag.query_engine import ask
 
-app = FastAPI(title="KubeManager", version="2.0")
+app = FastAPI(title="KubeEasy", version="3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
 
 _TOKEN     = os.getenv("AGENT_TOKEN", "")
 SCRIPT_DIR = os.getenv("SCRIPT_DIR", "/app/scripts")
 INDEX_FILE = "/data/index.json"
+_NS        = os.getenv("POD_NAMESPACE", "")
+_SECRET    = os.getenv("SECRET_NAME", "kubeeasy-secrets")
+_DEPLOY    = os.getenv("BACKEND_DEPLOYMENT_NAME", "kubeeasy-backend")
 os.makedirs("/data", exist_ok=True)
+
+
+def _start_rag_pipeline_background():
+    if os.getenv("DISABLE_RAG_PIPELINE", "").lower() in ("1", "true", "yes"):
+        return
+
+    def runner():
+        try:
+            from rag.rag_pipeline import pipeline_daemon
+            purge = os.getenv("RAG_PURGE_ON_START", "").lower() in ("1", "true", "yes")
+            interval = float(os.getenv("PIPELINE_INTERVAL_SECONDS", "15"))
+            pipeline_daemon(interval_seconds=interval, purge_on_start=purge)
+        except Exception:
+            traceback.print_exc()
+
+    threading.Thread(target=runner, daemon=True, name="rag-pipeline").start()
+
+
+_start_rag_pipeline_background()
+
+
+class SetupBody(BaseModel):
+    groqApiKey: str
+
+
+@app.get("/api/setup/status")
+def setup_status():
+    groq = (os.getenv("GROQ_API_KEY") or "").strip()
+    return {"needsGroq": not bool(groq)}
+
+
+@app.post("/api/setup")
+def setup_submit(body: SetupBody):
+    if (os.getenv("GROQ_API_KEY") or "").strip():
+        return JSONResponse({"error": "API key already configured"}, status_code=400)
+    key = (body.groqApiKey or "").strip()
+    if not key or not _NS:
+        return JSONResponse({"error": "Invalid request"}, status_code=400)
+    b64 = base64.b64encode(key.encode()).decode()
+    patch = json.dumps({"data": {"GROQ_API_KEY": b64}})
+    r = subprocess.run(
+        ["kubectl", "patch", "secret", _SECRET, "-n", _NS,
+         "-p", patch, "--type=merge"],
+        capture_output=True, text=True, timeout=30,
+    )
+    if r.returncode != 0:
+        return JSONResponse(
+            {"error": r.stderr or r.stdout or "patch failed"},
+            status_code=500,
+        )
+
+    def rollout():
+        time.sleep(2)
+        subprocess.run(
+            ["kubectl", "rollout", "restart", "deployment", _DEPLOY, "-n", _NS],
+            capture_output=True, text=True, timeout=60,
+        )
+
+    threading.Thread(target=rollout, daemon=True).start()
+    return {
+        "ok": True,
+        "message": "API key saved. Backend is restarting to apply it (~30s). Refresh this page, then connect.",
+    }
 
 # ── index (tracks deployed apps) ──────────────────────────────────────
 
@@ -202,9 +271,8 @@ async def ws_main(ws: WebSocket):
             # ── raw kubectl (power users) ─────────────────────────────
             elif action == "kubectl":
                 cmd_args = msg.get("args", [])
-                # block destructive ops on kubemanager namespace
-                if "delete" in cmd_args and "kubemanager" in " ".join(cmd_args):
-                    await _send(ws, {"type":"error","msg":"Cannot delete kubemanager namespace."})
+                if "delete" in cmd_args and _NS and _NS in " ".join(cmd_args):
+                    await _send(ws, {"type":"error","msg": f"Cannot delete {_NS} namespace (KubeEasy install namespace)."})
                     continue
                 out, rc = _kube(*cmd_args, timeout=30)
                 await _send(ws, {"type":"kubectl_result","output":out,"rc":rc})

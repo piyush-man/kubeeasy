@@ -1,5 +1,7 @@
--e .env
+.env
+.env.*
 qdrant_storage
 __pycache__
 *.pyc
 .git
+deploy/helm

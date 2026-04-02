@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kubeeasy.fullname" . }}-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeeasy.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.qdrant.storageClassName }}
+  storageClassName: {{ .Values.qdrant.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubeeasy.fullname" . }}-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeeasy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "kubeeasy.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      serviceAccountName: {{ include "kubeeasy.fullname" . }}
+      containers:
+        - name: backend
+          image: {{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: ["python", "api/server.py"]
+          ports:
+            - containerPort: {{ .Values.backend.port }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: BACKEND_DEPLOYMENT_NAME
+              value: {{ include "kubeeasy.fullname" . }}-backend
+            - name: SECRET_NAME
+              value: {{ include "kubeeasy.fullname" . }}-secrets
+            - name: PIPELINE_INTERVAL_SECONDS
+              value: {{ .Values.pipeline.intervalSeconds | quote }}
+            - name: RAG_PURGE_ON_START
+              value: {{ .Values.pipeline.purgeOnStart | quote }}
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kubeeasy.fullname" . }}-secrets
+                  key: GROQ_API_KEY
+            - name: AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kubeeasy.fullname" . }}-secrets
+                  key: AGENT_TOKEN
+            - name: QDRANT_HOST
+              value: {{ include "kubeeasy.fullname" . }}-qdrant
+            - name: QDRANT_PORT
+              value: "6333"
+            - name: SCRIPT_DIR
+              value: /app/scripts
+            - name: INDEX_FILE
+              value: /data/index.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 35
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "kubeeasy.fullname" . }}-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubeeasy.backendService" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeeasy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: backend
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.backend.port }}
+      targetPort: {{ .Values.backend.port }}

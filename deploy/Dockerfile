@@ -1,4 +1,13 @@
-FROM python:3.12-slim
+# Build from repository root:
+#   docker build -f deploy/Dockerfile --target backend -t your-registry/kubeeasy-api:latest .
+#   docker build -f deploy/Dockerfile --target frontend -t your-registry/kubeeasy-ui:latest .
+
+FROM nginx:1.25-alpine AS frontend
+COPY deploy/nginx.minimal.conf /etc/nginx/conf.d/default.conf
+COPY client/ /usr/share/nginx/html/
+
+# API image (default target when --target is omitted = last stage)
+FROM python:3.12-slim AS backend
 
 RUN apt-get update && apt-get install -y curl jq && \
     curl -LO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \

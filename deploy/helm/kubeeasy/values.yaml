@@ -1,0 +1,43 @@
+# helm install kubeeasy ./deploy/helm/kubeeasy -n kubeeasy --create-namespace \
+#   --set groqApiKey="$GROQ" --set agentToken="$(openssl rand -hex 32)" \
+#   --set backend.image.repository=... --set frontend.image.repository=...
+
+backend:
+  image:
+    repository: docker.io/piyushman/kubeeasy-api
+    tag: latest
+    pullPolicy: Always
+  port: 8080
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1.5Gi"
+      cpu: "1000m"
+
+frontend:
+  image:
+    repository: docker.io/piyushman/kubeeasy-ui
+    tag: latest
+    pullPolicy: Always
+  port: 80
+  serviceType: NodePort
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+
+qdrant:
+  storageClassName: ""
+  storageSize: 1Gi
+
+pipeline:
+  intervalSeconds: 15
+  purgeOnStart: false
+
+groqApiKey: ""
+agentToken: ""
