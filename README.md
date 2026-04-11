@@ -2,16 +2,10 @@
 
 <br/>
 
-```
- ██╗  ██╗██╗   ██╗██████╗ ███████╗███████╗ █████╗ ███████╗██╗   ██╗
- ██║ ██╔╝██║   ██║██╔══██╗██╔════╝██╔════╝██╔══██╗██╔════╝╚██╗ ██╔╝
- █████╔╝ ██║   ██║██████╔╝█████╗  █████╗  ███████║███████╗ ╚████╔╝ 
- ██╔═██╗ ██║   ██║██╔══██╗██╔══╝  ██╔══╝  ██╔══██║╚════██║  ╚██╔╝  
- ██║  ██╗╚██████╔╝██████╔╝███████╗███████╗██║  ██║███████║   ██║   
- ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝   
-```
 
-**Your Kubernetes cluster, explained in plain English. **
+### Kubeeasy
+
+** Your Kubernetes cluster virtual assistant **
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -23,7 +17,7 @@
 <br/>
 
 > **KubeEasy** is an AI-powered Kubernetes management assistant that lives *inside* your cluster.  
-> Ask questions in plain English. Get real answers. No YAML headaches, no terminal juggling.
+> Ask questions in English. Get real answers. No YAML headaches, no terminal juggling.
 
 <br/>
 
